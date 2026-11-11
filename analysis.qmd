@@ -1,0 +1,101 @@
+---
+title: "Prediction Markets"
+author: "Ángel Emilio Frías"
+format: html
+execute:
+  echo: false
+---
+
+```{r}
+#| message: false
+library(tidyverse)
+library(arrow)
+#| cache: true
+joined <- arrow::read_parquet("data/history.parquet") |>
+  left_join(
+    arrow::read_parquet("data/markets.parquet") |>
+      select(market_id, outcome, resolved_at),
+    by = "market_id"
+  ) |>
+  mutate(
+    outcome_numeric = if_else(outcome == "YES", 1L, 0L),
+    distance = abs(outcome_numeric - probability),
+    days_remaining = as.numeric(as.Date(resolved_at) - as.Date(date)),
+    horizon = factor(
+      case_when(
+        days_remaining > 90 ~ "more than 90 days out",
+        days_remaining > 30 & days_remaining <= 90 ~ "30 to 90",
+        days_remaining > 7 & days_remaining <= 30 ~ "7 to 30",
+        days_remaining >= 1 & days_remaining <= 7 ~ "1 to 7",
+        days_remaining == 0 ~ "final day"
+      ),
+      levels = c(
+        "more than 90 days out",
+        "30 to 90",
+        "7 to 30",
+        "1 to 7",
+        "final day"
+      ),
+      ordered = TRUE
+    )
+  )
+
+groups <- arrow::read_parquet("data/groups.parquet")
+market_groups <- arrow::read_parquet("data/market_groups.parquet")
+accuracy <- joined |>
+  group_by(horizon) |>
+  summarize(
+    mean_error = mean(distance),
+    snapshots = n(),
+    .groups = "drop"
+  )
+
+accuracy
+
+accuracy |>
+  ggplot(aes(x = horizon, y = mean_error, group = 1)) +
+  geom_line() +
+  geom_point(size = 2) +
+  labs(
+    title = "Prediction markets get smarter near the deadline",
+    subtitle = "Mean absolute error in Manifold Markets forecasts, by days remaining",
+    x = "Time Horizon",
+    y = "Mean Absolute Error"
+  ) +
+  theme_minimal()
+  final_day_snapshots <- joined |>
+  filter(days_remaining == 0)
+
+ggplot(final_day_snapshots, aes(x = probability)) +
+  geom_histogram(binwidth = 0.05, boundary = 0) +
+  labs(
+    title = "Forecast probabilities on resolution day",
+    x = "Probability assigned to YES",
+    y = "Number of snapshots"
+  ) +
+  theme_minimal()
+  calibration <- final_day_snapshots |>
+  mutate(probability_midpoint = (as.numeric(cut(probability, breaks = seq(0, 1, 0.1), include.lowest = TRUE)) - 0.5) / 10) |>
+  group_by(probability_midpoint) |>
+  summarize(
+    actual_rate = mean(outcome_numeric),
+    n = n(),
+    .groups = "drop"
+  )
+
+calibration
+
+ggplot(calibration, aes(x = probability_midpoint, y = actual_rate)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "gray50") +
+  geom_line() +
+  geom_point(aes(size = n)) +
+  scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1)) +
+  scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1)) +
+  labs(
+    title = "Final-day forecasts track the 45-degree line of perfect calibration",
+    x = "Forecasted Probability",
+    y = "Actual Resolution Rate",
+    size = "Markets"
+  ) +
+  theme_minimal()
+  
