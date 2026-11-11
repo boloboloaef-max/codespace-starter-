@@ -76,13 +76,58 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<p>#| message: false library(tidyverse) library(arrow) #| cache: true joined &lt;- arrow::read_parquet(“data/history.parquet”) |&gt; left_join( arrow::read_parquet(“data/markets.parquet”) |&gt; select(market_id, outcome, resolved_at), by = “market_id” ) |&gt; mutate( outcome_numeric = if_else(outcome == “YES”, 1L, 0L), distance = abs(outcome_numeric - probability), days_remaining = as.numeric(as.Date(resolved_at) - as.Date(date)), horizon = factor( case_when( days_remaining &gt; 90 ~ “more than 90 days out”, days_remaining &gt; 30 &amp; days_remaining &lt;= 90 ~ “30 to 90”, days_remaining &gt; 7 &amp; days_remaining &lt;= 30 ~ “7 to 30”, days_remaining &gt;= 1 &amp; days_remaining &lt;= 7 ~ “1 to 7”, days_remaining == 0 ~ “final day” ), levels = c( “more than 90 days out”, “30 to 90”, “7 to 30”, “1 to 7”, “final day” ), ordered = TRUE ) )</p>
-<p>groups &lt;- arrow::read_parquet(“data/groups.parquet”) market_groups &lt;- arrow::read_parquet(“data/market_groups.parquet”) accuracy &lt;- joined |&gt; group_by(horizon) |&gt; summarize( mean_error = mean(distance), snapshots = n(), .groups = “drop” )</p>
-<p>accuracy</p>
-<p>accuracy |&gt; ggplot(aes(x = horizon, y = mean_error, group = 1)) + geom_line() + geom_point(size = 2) + labs( title = “Prediction markets get smarter near the deadline”, subtitle = “Mean absolute error in Manifold Markets forecasts, by days remaining”, x = “Time Horizon”, y = “Mean Absolute Error” ) + theme_minimal() final_day_snapshots &lt;- joined |&gt; filter(days_remaining == 0)</p>
-<p>ggplot(final_day_snapshots, aes(x = probability)) + geom_histogram(binwidth = 0.05, boundary = 0) + labs( title = “Forecast probabilities on resolution day”, x = “Probability assigned to YES”, y = “Number of snapshots” ) + theme_minimal() calibration &lt;- final_day_snapshots |&gt; mutate(probability_midpoint = (as.numeric(cut(probability, breaks = seq(0, 1, 0.1), include.lowest = TRUE)) - 0.5) / 10) |&gt; group_by(probability_midpoint) |&gt; summarize( actual_rate = mean(outcome_numeric), n = n(), .groups = “drop” )</p>
-<p>calibration</p>
-<p>ggplot(calibration, aes(x = probability_midpoint, y = actual_rate)) + geom_abline(slope = 1, intercept = 0, linetype = “dashed”, color = “gray50”) + geom_line() + geom_point(aes(size = n)) + scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1)) + scale_y_continuous(labels = scales::percent_format(), limits = c(0, 1)) + labs( title = “Final-day forecasts track the 45-degree line of perfect calibration”, x = “Forecasted Probability”, y = “Actual Resolution Rate”, size = “Markets” ) + theme_minimal()</p>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 5 × 3
+  horizon               mean_error snapshots
+  &lt;ord&gt;                      &lt;dbl&gt;     &lt;int&gt;
+1 more than 90 days out     0.399       5239
+2 30 to 90                  0.311      15588
+3 7 to 30                   0.279      16467
+4 1 to 7                    0.180       5600
+5 final day                 0.0896       800</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="analysis_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="analysis_files/figure-html/unnamed-chunk-4-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="cell-output cell-output-stdout">
+<pre><code># A tibble: 10 × 3
+   probability_midpoint actual_rate     n
+                  &lt;dbl&gt;       &lt;dbl&gt; &lt;int&gt;
+ 1                 0.05     0.00939   426
+ 2                 0.15     0.0714     28
+ 3                 0.25     0.25       20
+ 4                 0.35     0.0556     18
+ 5                 0.45     0.55       20
+ 6                 0.55     0.65       20
+ 7                 0.65     0.611      18
+ 8                 0.75     0.818      11
+ 9                 0.85     1          18
+10                 0.95     0.995     221</code></pre>
+</div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="analysis_files/figure-html/unnamed-chunk-5-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
 
 </main>
 <!-- /main column -->
